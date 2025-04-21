@@ -1,0 +1,101 @@
+import numpy as np
+from qiskit import QuantumCircuit, Aer, execute
+import matplotlib.pyplot as plt
+import json
+
+# 설정
+n_qubits = 3
+shots = 1024
+max_iterations = 10
+priority_threshold = 0.7
+delta_angle = 0.25
+
+# 초기 회로 생성
+def create_circuit(U):
+    qc = QuantumCircuit(n_qubits, n_qubits)
+    for i in range(n_qubits):
+        qc.ry(U[i] * np.pi, i)
+    qc.barrier()
+    qc.measure(range(n_qubits), range(n_qubits))
+    return qc
+
+# 회로 실행
+def run_circuit(qc):
+    sim = Aer.get_backend('qasm_simulator')
+    result = execute(qc, sim, shots=shots).result()
+    return result.get_counts()
+
+# 우선도 갱신
+def update_priority(priority, counts):
+    total = sum(counts.values())
+    for bitstring, freq in counts.items():
+        prob = freq / total
+        for i, bit in enumerate(reversed(bitstring)):
+            priority[i][int(bit)] += prob
+    return priority
+
+# 의도 계산
+def compute_intent(priority):
+    intent = []
+    for qubit in priority:
+        total = sum(qubit)
+        dominant = max(qubit)
+        intent.append(dominant / total if total > 0 else 0)
+    return intent
+
+# 가장 의도가 높은 큐빗 하나 선택
+def select_target(intent, modified_flags):
+    intent_filtered = [
+        val if (val >= priority_threshold and not modified_flags[i]) else 0.0
+        for i, val in enumerate(intent)
+    ]
+    return int(np.argmax(intent_filtered)) if max(intent_filtered) >= priority_threshold else None
+
+# 시각화
+def plot_counts(counts_list):
+    for i, counts in enumerate(counts_list):
+        plt.figure()
+        plt.bar(counts.keys(), counts.values())
+        plt.title(f"Iteration {i}")
+        plt.xlabel("State")
+        plt.ylabel("Counts")
+        plt.show()
+
+# 초기 설정
+U = np.array([0.25] * n_qubits)
+priority = [[0.0, 0.0] for _ in range(n_qubits)]
+modified_flags = [False] * n_qubits
+history = []
+
+# 반복 실행
+for iteration in range(max_iterations):
+    qc = create_circuit(U)
+    counts = run_circuit(qc)
+    priority = update_priority(priority, counts)
+    intent = compute_intent(priority)
+    
+    target = select_target(intent, modified_flags)
+
+    print(f"Iteration {iteration} | Intent: {np.round(intent, 4)}")
+    if target is not None:
+        U[target] = min(U[target] + delta_angle, 1.0)
+        modified_flags[target] = True
+        print(f"▶ 큐빗 {target} 구조 반응 (RY += {delta_angle})")
+    else:
+        print("▶ 구조 반응 없음 → 유지")
+
+    history.append({
+        "iteration": iteration,
+        "params": U.tolist(),
+        "counts": counts,
+        "priority": priority,
+        "intent": intent,
+        "modified": target
+    })
+
+# 결과 저장
+with open("sequence_log.json", "w") as f:
+    json.dump(history, f, indent=2)
+
+# 시각화
+plot_counts([h["counts"] for h in history])

@@ -1,0 +1,94 @@
+#관측 기반 자기변형 회로(Self-Modifying Quantum Circuit from Observation)
+
+import numpy as np
+from qiskit import QuantumCircuit, Aer, execute
+from scipy.stats import entropy
+import matplotlib.pyplot as plt
+import json
+
+# 설정
+sim = Aer.get_backend('qasm_simulator')
+shots = 1024
+max_iterations = 10
+entropy_threshold = 2.2
+concentration_threshold = 0.6
+n_qubits = 3
+
+# 초기 회로 생성 함수
+def create_initial_circuit(n):
+    qc = QuantumCircuit(n, n)
+    for i in range(n):
+        qc.ry(np.pi / 4, i)
+    qc.barrier()
+    qc.measure(range(n), range(n))
+    return qc
+
+# 측정 실행 함수
+def run_circuit(qc):
+    job = execute(qc, sim, shots=shots)
+    result = job.result()
+    counts = result.get_counts()
+    return counts
+
+# 결과 평가 함수
+def evaluate_counts(counts):
+    total = sum(counts.values())
+    probs = np.array([v / total for v in counts.values()])
+    entropy_val = entropy(probs)
+    max_state_ratio = max(probs)
+    return max_state_ratio, entropy_val
+
+# 회로 수정 함수
+def modify_circuit_structure(qc, iteration):
+    qc.data.clear()  # 기존 게이트 제거
+    if iteration % 2 == 0:
+        for i in range(n_qubits):
+            qc.h(i)
+    else:
+        for i in range(n_qubits - 1):
+            qc.cx(i, i + 1)
+    qc.barrier()
+    qc.measure(range(n_qubits), range(n_qubits))
+    return qc
+
+# 시각화 함수
+def plot_counts(counts_list):
+    for i, counts in enumerate(counts_list):
+        plt.figure()
+        plt.bar(counts.keys(), counts.values())
+        plt.title(f"Iteration {i}")
+        plt.xlabel("State")
+        plt.ylabel("Counts")
+        plt.show()
+
+# 실험 루프 실행
+history = []
+qc = create_initial_circuit(n_qubits)
+
+for i in range(max_iterations):
+    counts = run_circuit(qc)
+    max_ratio, H = evaluate_counts(counts)
+    
+    history.append({
+        "iteration": i,
+        "counts": counts,
+        "entropy": H,
+        "max_state_ratio": max_ratio
+    })
+
+    print(f"Iteration {i} | Entropy: {H:.4f} | Max State Ratio: {max_ratio:.4f}")
+    
+    if max_ratio >= concentration_threshold:
+        print("▶ 관측 집중 상태 도달 → 구조 고정")
+        break
+
+    if H <= entropy_threshold:
+        print("▶ 엔트로피 낮음 → 회로 구조 변경")
+        qc = modify_circuit_structure(QuantumCircuit(n_qubits, n_qubits), i)
+
+# 결과 저장
+with open("circuit_log.json", "w") as f:
+    json.dump(history, f, indent=2)
+
+# 시각화
+plot_counts([entry["counts"] for entry in history])

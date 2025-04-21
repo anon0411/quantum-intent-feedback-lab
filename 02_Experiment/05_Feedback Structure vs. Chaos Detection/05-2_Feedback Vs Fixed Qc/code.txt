@@ -1,0 +1,80 @@
+import numpy as np
+from qiskit import QuantumCircuit, Aer, execute
+from scipy.spatial.distance import cosine
+from tqdm import tqdm
+
+# 설정
+n_qubits = 3
+shots = 1024
+iterations = 20
+eta = 0.25  # 피드백 학습률
+sim = Aer.get_backend('qasm_simulator')
+
+# 초기 회전값 (양 회로 공통)
+theta_A = np.random.rand(n_qubits)  # 회로 A: 피드백 구조
+theta_B = theta_A.copy()            # 회로 B: 고정 구조
+
+# 기록용
+intent_vectors_A = []
+intent_vectors_B = []
+similarities_A = []
+similarities_B = []
+
+# 분포 → [0,1]^n 벡터로 변환
+def counts_to_vector(counts, n=n_qubits):
+    total = sum(counts.values())
+    vec = np.zeros(n)
+    for bitstring, count in counts.items():
+        prob = count / total
+        bits = [int(b) for b in bitstring[::-1]]  # Qiskit은 큐빗 순서가 반대
+        vec += np.array(bits) * prob
+    return vec
+
+# 회로 실행
+def run_circuit(theta):
+    qc = QuantumCircuit(n_qubits, n_qubits)
+    for i, angle in enumerate(theta):
+        qc.ry(angle * np.pi, i)
+    qc.measure(range(n_qubits), range(n_qubits))
+    result = execute(qc, sim, shots=shots).result()
+    return result.get_counts()
+
+print("=== 대조 실험 시작 ===")
+for i in tqdm(range(iterations)):
+    # 회로 A: 피드백 구조
+    counts_A = run_circuit(theta_A)
+    vec_A = counts_to_vector(counts_A)
+    intent_vectors_A.append(vec_A)
+    if i > 0:
+        sim_A = 1 - cosine(intent_vectors_A[i], intent_vectors_A[i - 1])
+        similarities_A.append(sim_A)
+    else:
+        similarities_A.append(1.0)
+    theta_A += eta * (vec_A - 0.5)  # 피드백 적용
+
+    # 회로 B: 고정 구조
+    counts_B = run_circuit(theta_B)
+    vec_B = counts_to_vector(counts_B)
+    intent_vectors_B.append(vec_B)
+    if i > 0:
+        sim_B = 1 - cosine(intent_vectors_B[i], intent_vectors_B[i - 1])
+        similarities_B.append(sim_B)
+    else:
+        similarities_B.append(1.0)
+    # theta_B는 고정 (피드백 없음)
+
+print("\n=== 회로 A (피드백 구조) ===")
+print("최종 회전값:", np.round(theta_A, 4))
+print("출력 상태 벡터 (마지막 5회):")
+for v in intent_vectors_A[-5:]:
+    print(np.round(v, 4))
+print("코사인 유사도 흐름:")
+print(np.round(similarities_A, 4))
+
+print("\n=== 회로 B (고정 구조) ===")
+print("최종 회전값:", np.round(theta_B, 4))
+print("출력 상태 벡터 (마지막 5회):")
+for v in intent_vectors_B[-5:]:
+    print(np.round(v, 4))
+print("코사인 유사도 흐름:")
+print(np.round(similarities_B, 4))

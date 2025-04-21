@@ -1,0 +1,97 @@
+import numpy as np
+from qiskit import QuantumCircuit, Aer, execute
+from scipy.stats import entropy
+import matplotlib.pyplot as plt
+import json
+
+# 설정
+n_qubits = 3
+shots = 1024
+max_iterations = 10
+priority_threshold = 0.7
+
+# 초기 회로 생성
+def create_initial_circuit(U):
+    qc = QuantumCircuit(n_qubits, n_qubits)
+    for i in range(n_qubits):
+        qc.ry(U[i] * np.pi, i)
+    qc.barrier()
+    qc.measure(range(n_qubits), range(n_qubits))
+    return qc
+
+# 회로 실행
+def run_circuit(qc):
+    sim = Aer.get_backend('qasm_simulator')
+    job = execute(qc, sim, shots=shots)
+    result = job.result()
+    return result.get_counts()
+
+# 우선도 갱신
+def update_priority(priority, counts):
+    total = sum(counts.values())
+    for bitstring, freq in counts.items():
+        prob = freq / total
+        for i, bit in enumerate(reversed(bitstring)):
+            priority[i][int(bit)] += prob
+    return priority
+
+# 우선도 → 의도 결정
+def compute_intent(priority):
+    intent = []
+    for qubit in priority:
+        total = sum(qubit)
+        dominant = max(qubit)
+        intent.append(dominant / total if total > 0 else 0)
+    return intent
+
+# 회로 구조 조정
+def modify_circuit(U, intent):
+    new_U = U.copy()
+    for i, val in enumerate(intent):
+        if val >= priority_threshold:
+            new_U[i] = min(new_U[i] + 0.25, 1.0)  # 의도 강화 (각도 증가)
+    return new_U
+
+# 시각화
+def plot_counts(counts_list):
+    for i, counts in enumerate(counts_list):
+        plt.figure()
+        plt.bar(counts.keys(), counts.values())
+        plt.title(f"Iteration {i}")
+        plt.xlabel("State")
+        plt.ylabel("Counts")
+        plt.show()
+
+# 초기 설정
+U = np.array([0.25] * n_qubits)
+priority = [[0.0, 0.0] for _ in range(n_qubits)]
+history = []
+
+# 반복 실행
+for i in range(max_iterations):
+    qc = create_initial_circuit(U)
+    counts = run_circuit(qc)
+    priority = update_priority(priority, counts)
+    intent = compute_intent(priority)
+
+    history.append({
+        "iteration": i,
+        "params": U.tolist(),
+        "counts": counts,
+        "priority": priority,
+        "intent": intent
+    })
+
+    print(f"Iteration {i} | Intent: {np.round(intent, 4)}")
+    if any(val >= priority_threshold for val in intent):
+        print("▶ 우선도 기준 초과 → 구조 조정")
+        U = modify_circuit(U, intent)
+    else:
+        print("▶ 변화 없음 → 구조 유지")
+
+# 결과 저장
+with open("priority_log.json", "w") as f:
+    json.dump(history, f, indent=2)
+
+# 시각화
+plot_counts([h["counts"] for h in history])
