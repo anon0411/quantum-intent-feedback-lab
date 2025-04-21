@@ -1,3 +1,6 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15253812.svg)](https://doi.org/10.5281/zenodo.15253812)
+![Topics: quantum-intent, structure, feedback, self-organization, quantum-circuit, documentation, PiTer](https://img.shields.io/badge/topics-quantum--intent%2C%20structure%2C%20feedback%2C%20self--organization%2C%20quantum--circuit%2C%20documentation%2C%20PiTer-blue)
+
 # Quantum Intent Feedback Lab  
 **양자 의도 피드백 실험실**
 
