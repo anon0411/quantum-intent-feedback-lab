@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15253812.svg)](https://doi.org/10.5281/zenodo.15253812)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15287160.svg)](https://doi.org/10.5281/zenodo.15287160)
 ![Topics: quantum-circuit, structure, feedback, self-organization, quantum-computation, documentation, PiTer](https://img.shields.io/badge/topics-quantum--circuit%2C%20structure%2C%20feedback%2C%20self--organization%2C%20quantum--computation%2C%20documentation%2C%20PiTer-blue)
 
 # Feedback-Induced Structural Responsiveness Lab  
